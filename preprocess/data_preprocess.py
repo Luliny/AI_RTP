@@ -668,7 +668,8 @@ def batch_process_cases(in_dir, out_dir):
 
     oars2 = ['lung_l', 'lung_r','spinalcord', 'esophagus', 'heart',  'ptv']    # for DL
     labels2 = dict.fromkeys(oars,0)
-    label_seq = [0, 6, 7, 1, 2, 3, 4, 5, 1]
+    label_seq = [1, 7, 8, 2, 3, 4, 5, 6, 1]
+    #label_seq = [0, 6, 7, 1, 2, 3, 4, 5, 1]
     for w2, key2 in enumerate(oars):
         labels2[key2] = label_seq[w2]        ## labels2 generate full organ mask to caluclate evalution DVHs not for learning  
         
