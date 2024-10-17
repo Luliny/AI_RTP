@@ -223,6 +223,29 @@ def get_oar_roi_indexes_modified(ds, oar_dict, Plan_Dx):
                 oar_dict['lung_r'] = idx  # It means ROI index found for this anatomy
                 break               
 
+    v = oar_dict['a_lad']
+    if v == -1:  # If still not found
+        for idx, struc in enumerate(ds.StructureSetROISequence):
+            elem = struc['ROIName']
+            roi_name = elem.value.lower()
+            roi_name_1 = elem.value
+            if bool(re.fullmatch(r'.*LAD.*', roi_name_1))|bool(re.fullmatch(r'.*ant.+des.*', roi_name)):
+                new_oar_dict['a_lad'] = roi_name
+                oar_dict['a_lad'] = idx  # It means ROI index found for this anatomy
+                break               
+
+    Map_CE = ['Esophagus_Contra', 'Esophagus_CE', 'Esophagus_Cont_1', 'Eso_CE', 'Contra_Esophagus', 'Esophagus_Cont_1, Esophagus_Contra']
+    Map_CE = str(Map_CE).lower()
+    v = oar_dict['esophagus_ce']
+    if v == -1:  # If still not found
+        for idx, struc in enumerate(ds.StructureSetROISequence):
+            elem = struc['ROIName']
+            roi_name = elem.value.lower()
+            if roi_name in Map_CE:
+                new_oar_dict['esophagus_ce'] = roi_name
+                oar_dict['esophagus_ce'] = idx  # It means ROI index found for this anatomy
+                break 
+            
     v = oar_dict['spinalcord']
     if v == -1:  # If still not found
         for idx, struc in enumerate(ds.StructureSetROISequence):
@@ -539,9 +562,9 @@ def get_dvh_clinical(dose, oar, ptv):
     oar = torch.cat((oar, ptv), axis=0)
 
     vols = torch.sum(oar, axis=(1, 2, 3))
-    n_bins = 376
+    n_bins = 426
     hist = torch.zeros((n_bins, 8)).to(device)
-    bins = torch.linspace(0, 75, n_bins)
+    bins = torch.linspace(0, 85, n_bins)
     bin_w = bins[1] - bins[0]
 
     for i in range(bins.shape[0]):
@@ -577,17 +600,22 @@ def get_dvh_clinical(dose, oar, ptv):
 
     return hist_numpy, bins_np
     
-def process_case(in_dir, out_dir, case, idx2, labels2):
+def process_case(in_dir, out_dir, case, idx2, labels2, ct1, dose1, oar, ptv):
     ##!! LY importanct  Process case by case from each subfolder
-    ct = get_dataset(out_dir, case+'_'+str(idx2), '_CT.nrrd')
-    dose = get_dataset(out_dir, case+'_'+str(idx2), '_dose_resampled.nrrd')
-    # dose = get_dataset(out_dir, case, '_dose_resampled.nrrd')  # Manual dose
-    oar = get_dataset(out_dir, case+'_'+str(idx2), '_RTSTRUCTS.nrrd')
-    ptv = get_dataset(out_dir, case+'_'+str(idx2), '_PTV.nrrd')
+   ### ct = get_dataset(out_dir, case+'_'+str(idx2), '_CT.nrrd')  ##debug
+    ##dose = get_dataset(out_dir, case+'_'+str(idx2), '_dose_resampled.nrrd')  ##debug
+    #dose = resample(dose_orig, ct)
+    #dose = get_dataset(out_dir, case, '_dose_resampled.nrrd')  # Manual dose
+    ##oar = get_dataset(out_dir, case+'_'+str(idx2), '_RTSTRUCTS.nrrd')  ##debug
+    ##ptv = get_dataset(out_dir, case+'_'+str(idx2), '_PTV.nrrd')  ##debug
     # beamlet = get_dataset(out_dir, case, '_echo_dose_beamlet_resampled.nrrd')
     # beamlet = get_dataset(out_dir, case, '_manual_dose_beamlet_resampled.nrrd')
     # beamlet = get_dataset(out_dir, case, '_echo_dose_beamlet_sparse_resampled.nrrd')
     # beamlet = get_dataset(out_dir, case, '_manual_dose_beamlet_sparse_resampled.nrrd')
+    
+    ###############debug
+    ct = sitk.GetArrayFromImage(ct1)
+    dose = sitk.GetArrayFromImage(dose1)
 
     oar_copy = oar.copy()
     oar_copy[np.where(ptv == 1)] = labels2['ptv']
@@ -612,26 +640,41 @@ def process_case(in_dir, out_dir, case, idx2, labels2):
     #print(ptv)
     #print(dose_copy)
     sum = np.sum(dose_copy)
-    scale_factor = (60 * num_ptv) / sum
+    ##############scale_factor = (60 * num_ptv) / sum    ##debug
 
-    dose_copy *= scale_factor
+    #####################dose_copy *= scale_factor    ##debug
 
-    dose[np.where(ptv == 1)] = dose_copy[np.where(ptv == 1)]
+## not scaling dose
+   ### dose[np.where(ptv == 1)] = dose_copy[np.where(ptv == 1)]
 
     ct = np.clip(ct, a_min=-1000, a_max=3071)
     ct = (ct + 1000) / 4071
     ct = ct.astype(np.float32)
 
-    dose = np.clip(dose, a_min=0, a_max=75)
+    dose = np.clip(dose, a_min=0, a_max=85)
     ##return oar, ptv
-
-    hist_sig, bins = get_dvh(dose, oar, ptv)
-    hist_clinical, bins = get_dvh_clinical(dose, oar, ptv)
+##  chnage the orientations and directions of the coordinates to be consistent with DoseRTX.
+##  This is not the normal view of images in clinical TPS, with AP along x and LR along Y.  -10/14/2024 LY
+    dose_1 = np.transpose(dose, (2,1,0))
+    #dose_1 = np.flip(dose_1, axis=0);
+    #dose_1 = np.flip(dose_1, axis=1);
+    #dose_1 = dose_1.copy()
+    
+    ct_1 = np.transpose(ct, (2,1,0))
+    #ct_1 = np.flip(ct_1, axis=0);
+    #ct_1 = np.flip(ct_1, axis=1);
+    #ct_1 = ct_1.copy()     
+    
+    oar_1 = np.transpose(oar, (1,2,0))
+    ptv_1 = np.transpose(ptv, (1,2,0))
+    
+    hist_sig, bins = get_dvh(dose_1, oar_1, ptv_1)
+    hist_clinical, bins = get_dvh_clinical(dose_1, oar_1, ptv_1)
 
     filename = os.path.join(out_dir, case+'_'+str(idx2) )
-    np.savez(filename, CT=ct, DOSE=dose, OAR=oar, PTV=ptv, HIST_SIG=hist_sig, HIST_CLINICAL = hist_clinical, BINS=bins)
-    filename_mat = os.path.join(out_dir, case+'_plan_data.mat')
-    sio.savemat(filename_mat, {'DOSE_REAL': dose, 'CT': ct, 'HIST_REAL': hist_clinical, 'HIST_SIG': hist_sig, 'BINS': bins})
+    np.savez(filename, CT=ct_1, DOSE=dose_1, OAR=oar_1, PTV=ptv_1, HIST_SIG=hist_sig, HIST_CLINICAL = hist_clinical, BINS=bins)
+    filename_mat = os.path.join(out_dir, case+'_'+str(idx2) +'.mat')
+    sio.savemat(filename_mat, {'DOSE_REAL': dose_1, 'CT': ct_1, 'OAR': oar_1, 'PTV': ptv_1,'HIST_REAL': hist_clinical, 'HIST_SIG': hist_sig, 'BINS': bins})
     return hist_clinical, bins
     
 
@@ -682,11 +725,11 @@ def batch_process_cases(in_dir, out_dir):
 ## Data frame of case info
     column_names = ['CaseID', 'PlanInd', 'PlanID', 'Dx','AllDataSet?','AllContours?','ExtractedOK?'] + oars
     df_cases = pd.DataFrame(columns=column_names)
-    filename = os.path.join(out_dir, 'Cases_processing_summary.csv')
+    filename_summary = os.path.join(out_dir, 'Cases_processing_summary.csv')
     #fh = open(filename,"w",newline="")
 
     #for idx, case in enumerate(cases):
-    for idx in range(50, len(cases)-1):
+    for idx in range(0, len(cases)):
         case = cases[idx]
         print('Processing case {}: {} of {} ...'.format(case, idx+1, len(cases)))
         case_path = os.path.join(in_dir, case)
@@ -711,9 +754,9 @@ def batch_process_cases(in_dir, out_dir):
                 continue
                 
             ##read dicom CT and write it in out_dir
-            img = read_dicom(in_dir, case, list4)
+            CT_img = read_dicom(in_dir, case, list4)
             filename = os.path.join(out_dir, case + '_'+str(idx2) +'_CT.nrrd')
-            sitk.WriteImage(img, filename)
+            #sitk.WriteImage(CT_img, filename)   ###########debug
             
             ##read dicom dose and write in out dir
             ds= get_rtplan_dicom(in_dir, case, list1)
@@ -733,7 +776,7 @@ def batch_process_cases(in_dir, out_dir):
             ##read dicom dose and write in out dir
             doseImg = read_dicom_dose(in_dir, case, list3)
             filename = os.path.join(out_dir, case + '_'+str(idx2) + '_dose.nrrd')
-            sitk.WriteImage(doseImg, filename)
+            #sitk.WriteImage(doseImg, filename) ########debug
             #sitk.WriteImage(dose_img, filename)
             #pdb.set_trace()
             ds = get_rtstruct_dicom(in_dir, case, list2)  # RT struct dicom dataset with all information
@@ -744,7 +787,9 @@ def batch_process_cases(in_dir, out_dir):
                continue
             row_data1 = {'CaseID':case, 'PlanInd':idx2, 'PlanID': PlanID, 'Dx':Plan_Dx,'AllDataSet?': True}
             
-            ref_ct = get_ref_ct(out_dir, case, idx2)     # Ref CT to transform contour points
+############debug
+            ##ref_ct = get_ref_ct(out_dir, case, idx2)     # Ref CT to transform contour points
+            ref_ct = CT_img
             
     ## change oar2--> oars2 to do deep learning
             target_oars = dict.fromkeys(oars, -1)  # Will store index of target OAR contours from dicom dataset
@@ -768,6 +813,10 @@ def batch_process_cases(in_dir, out_dir):
                     continue
                 anatomyStruc = ds['ROIContourSequence'][v]
                 anatomy_mask = np.zeros_like(oar_mask)
+                if 'ContourSequence' in anatomyStruc:
+                    pass
+                else:
+                    continue    
                 for i, elem in enumerate(anatomyStruc['ContourSequence']):  # Fill all planar contours for anatomy 'k' with corresponding label
                     points = get_contour_points(elem)
                     coords = transform_phy_pts_to_indexes(points, ref_ct)
@@ -776,16 +825,17 @@ def batch_process_cases(in_dir, out_dir):
                     ptv_mask[np.where(anatomy_mask > 0)] = labels2[k]
                 else:
                     oar_mask[np.where(anatomy_mask > 0)] = labels2[k]
-            write_image(oar_mask, out_dir, case, '_'+str(idx2)+'_RTSTRUCTS.nrrd', ref_ct)
-            write_image(ptv_mask, out_dir, case, '_'+str(idx2)+'_PTV.nrrd', ref_ct)
+            ##write_image(oar_mask, out_dir, case, '_'+str(idx2)+'_RTSTRUCTS.nrrd', ref_ct)  ##debug
+            ##write_image(ptv_mask, out_dir, case, '_'+str(idx2)+'_PTV.nrrd', ref_ct)      ##debug
             
             dose_resampled = resample(doseImg, ref_ct)
             filename = os.path.join(out_dir, case + '_'+str(idx2)+'_dose_resampled.nrrd')
-            sitk.WriteImage(dose_resampled, filename)
+            ##sitk.WriteImage(dose_resampled, filename)     ##debug
             ##process all the nrrd files
             try:
                     print('Processing case {}: {} of {} ...'.format(case, idx+1, len(cases)))
-                    hist, w2 = process_case(in_dir, out_dir, case, idx2, labels2)
+                    ##hist, w2 = process_case(in_dir, out_dir, case, idx2, labels2)
+                    hist, w2 = process_case(in_dir, out_dir, case, idx2, labels2,CT_img,dose_resampled,oar_mask, ptv_mask)
                     row_data2 = {'ExtractedOK?':True}
                     row_data = {**row_data1, **row_data2, **new_target_oars}
                    ## df_cases = df_cases.append(row_data,ignore_index=True)  append is removed in new version of pandas
@@ -805,7 +855,7 @@ def batch_process_cases(in_dir, out_dir):
                     ##exit()
     
         # Export the DataFrame as a CSV spreadsheet
-        fh = open(filename,"w",newline="")
+        fh = open(filename_summary,"w",newline="")
         df_cases.to_csv(fh)
         fh.flush()
         fh.close()
@@ -815,10 +865,12 @@ def batch_process_cases(in_dir, out_dir):
 ## DEbug
 
 ## AI_RTP: Specify your DICOM file folder  
+DICOM_folder = 'R:/LulinY/VCU_Lung_2024_new'
 DICOM_folder = 'R:/LulinY/VCU_Lung_2023'
 in_dir = DICOM_folder
 #out_dir = "Z:\LulinY\Lung-dosimetrics\2024\python_code\AI_RTP\VCU_Lung_2024_processed_data"
 ## AI_RTP: Output file folder for extracted CT, Dose, contour data in nrrd/npz/Matlab formats 
-out_dir = "R:/LulinY/Processed_Lung_Data"
+out_dir = "R:/LulinY/Processed_NPZ_2"
+out_dir_1 = "R:/LulinY/Processed_Lung_Data"
 w2, hist = batch_process_cases(in_dir,out_dir)
 #fh.close()
