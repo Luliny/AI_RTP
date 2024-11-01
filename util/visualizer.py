@@ -3,9 +3,11 @@ import sys
 import os
 import ntpath
 import time
-import SimpleITK as sitk
+#import SimpleITK as sitk
 from collections import OrderedDict
 from . import util
+import scipy.io as sio
+
 #from . import html
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
@@ -46,12 +48,15 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, npy_o
         
         if 'fake_Dose' in label: # CBCT to CT translated image
             image_numpy = (im_data[0].cpu().float().numpy())[0]  # convert it into a numpy array
-            suffix = npy_out_fnames[idx] + '.nrrd'
+            suffix = npy_out_fnames[idx] + '.mat'
 
-            image_sitk = sitk.GetImageFromArray(image_numpy)
+            #image_sitk = sitk.GetImageFromArray(image_numpy)
 
             save_path = os.path.join(npz_image_dir, name + '_' + suffix)
-            sitk.WriteImage(image_sitk, save_path)
+            #sitk.WriteImage(image_sitk, save_path)
+            #Save npz arrays
+            #np.savez(save_path, fake_DOSE=image_numpy)
+            sio.savemat(save_path, {'fake_DOSE': image_numpy})
             idx += 1
     
 class Visualizer():
@@ -130,12 +135,16 @@ class Visualizer():
                 if len(image_numpy.shape) == 4:
                     if 'fake_Dose' in label or 'real_Dose' in label:
 
-                        img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.nrrd' % (epoch, label))
-                        image_sitk = sitk.GetImageFromArray(image_numpy[0])
+                        img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.npz' % (epoch, label))
+                        ##image_sitk = sitk.GetImageFromArray(image_numpy[0])
                         # sitk.WriteImage(image_sitk, img_path)
+                        ##save npz files, not nrrd
+                        w2 = image_numpy[0]
+                        np.savez(img_path, label=w2)
+                        
                 else:
-                    img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
-                    util.save_image(image_numpy, img_path)
+                    img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.npz' % (epoch, label))
+                    util.save_image_numpy_multitask(image_numpy, img_path)
             # update website
            # webpage = html.HTML(self.web_dir, 'Experiment name = %s' % self.name, refresh=1)
            

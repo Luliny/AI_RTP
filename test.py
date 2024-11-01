@@ -32,7 +32,7 @@ from data import create_dataset
 from models import create_model
 from util.visualizer import save_images
 #from util.visualizer import save_ct_volumes
-#from util import html
+from util import html
 
 # Select the variable names of the npz images
 # Total number / order should match the output of the generator
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     if opt.load_iter > 0:  # load_iter is 0 by default
         web_dir = '{:s}_iter{:d}'.format(web_dir, opt.load_iter)
     print('creating web directory', web_dir)
-    #####webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.epoch))
+    webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.epoch))
     # test with eval mode. This only affects layers like batchnorm and dropout.
     # For [pix2pix]: we use batchnorm and dropout in the original pix2pix. You can experiment it with and without eval() mode.
     # For [CycleGAN]: It should not affect CycleGAN as CycleGAN uses instancenorm without dropout.
@@ -70,6 +70,6 @@ if __name__ == '__main__':
         img_path = model.get_image_paths()     # get image paths
         if i % 5 == 0:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
- #$       save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize, npy_out_fnames=npy_out_fnames)
- #$   webpage.save()  # save the HTML
+        save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize, npy_out_fnames=npy_out_fnames)
+    webpage.save()  # save the HTML
     #save_ct_volumes(webpage.get_npz_image_dir(), npy_out_fnames=npy_out_fnames)
